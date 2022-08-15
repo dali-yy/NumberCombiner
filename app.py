@@ -1,3 +1,4 @@
+import math
 import multiprocessing
 import os
 import sys
@@ -5,9 +6,8 @@ from datetime import datetime
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
-from utils import genCombinationsByFile, resultToFile
+from utils import batchCountCombination, genCombinationsWithCondition, getConditionsFromFile, mergeDict, parseConditionFilename, resultToFile
 from constant import STATUS
-from workThread import WorkThread
 
 
 def setTableItem(tableWidget, row, col, text):
@@ -424,9 +424,42 @@ class MainUi(QMainWindow):
         # 选中的文件数
         checkedCount = len(checkedConditionFiles)
         self.finishedLabel.setText('已完成 {:d}/{:d}'.format(0, checkedCount))
-        self.workThread = WorkThread(checkedConditionFiles, self.resultDir, processCount)
-        self.workThread.progress.connect(self.onProgressChanged)
-        self.workThread.start()
+        for checkedFile in checkedConditionFiles:
+            result = []  # 最终结果
+
+            faultRange = parseConditionFilename(checkedFile['filename'])  # 容错范围
+            conditions = getConditionsFromFile(checkedFile['filePath'])  # 获取文件中所有条件
+            conditionCount = len(conditions)  # 条件数
+            batchSize = math.ceil(conditionCount / (processCount + 1))  # 批次大小（每个进程计算的条件）,加1是因为主进程
+
+            countList = multiprocessing.Manager().list()  # 多进程共享变量
+            with multiprocessing.Pool(processCount) as pool: # 进程池
+                # 前batchsize个条件留给主进程计算
+                for i in range(batchSize, conditionCount, batchSize):
+                    batchConditions = conditions[i: i + batchSize] if i + batchSize < conditionCount else conditions[i:]
+                    pool.apply_async(batchCountCombination, args=(batchConditions, countList,))
+                # 主进程计算
+                mainCombinationCount = {}
+                for idx, condition in enumerate(conditions):
+                    combinations = genCombinationsWithCondition(condition)
+                    QApplication.processEvents()
+                    for combination in combinations:
+                        mainCombinationCount[combination] = mainCombinationCount.get(combination, 0) + 1
+                    QApplication.processEvents()
+                countList.append(mainCombinationCount)
+                # 等待所有进程运行完毕
+                pool.close()
+                pool.join()
+
+            allCombinationCount = mergeDict(countList)  # 每个组合出现的次数
+            print(allCombinationCount)
+            # 获取文件对应的结果
+            for key, value in allCombinationCount.items():
+                if faultRange[0] <= conditionCount - value <= faultRange[1]:
+                    result.append(key)
+        # self.workThread = WorkThread(checkedConditionFiles, self.resultDir, processCount)
+        # self.workThread.progress.connect(self.onProgressChanged)
+        # self.workThread.start()
         # # 计算被选中的文件
         # for idx, checkedFile in enumerate(checkedConditionFiles):
         #     # 修改文件状态为运行中

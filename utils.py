@@ -5,7 +5,7 @@ import itertools
 import re
 from copy import copy
 from typing import List
-from multiprocessing import Pool, Manager, Process
+from multiprocessing import Pool, Manager
 import math
 from tqdm import tqdm
 
@@ -122,7 +122,7 @@ def _genCombinationsByFile(filePath: str, processCount: int) -> list:
     conditionCount = len(conditions)  # 条件数
     countList = Manager().list()  # 多进程共享变量
 
-    batchSize = math.ceil(conditionCount / processCount)  # 批量大小
+    batchSize = math.ceil(conditionCount / (processCount + 1))  # 批量大小
     with Pool(processCount) as pool:
         for i in range(0, conditionCount, batchSize):
             batchConditions = conditions[i: i + batchSize] if i + batchSize < conditionCount else conditions[i:]
@@ -132,7 +132,6 @@ def _genCombinationsByFile(filePath: str, processCount: int) -> list:
             combinations = genCombinationsWithCondition(condition)
             for combination in combinations:
                 mainCount[combination] = mainCount.get(combination, 0) + 1
-        print(mainCount)
         countList.append(mainCount)
         pool.close()
         pool.join()

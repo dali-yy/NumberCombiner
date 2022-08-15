@@ -1,9 +1,7 @@
 import math
-import os
 from PyQt5.QtCore import QThread, pyqtSignal
-from multiprocessing import Pool, Queue, Manager
-from utils import resultToFile, parseConditionFilename, getConditionsFromFile, batchCountCombination, mergeDict, \
-    genCombinationsWithCondition
+from multiprocessing import Pool, Manager
+from utils import parseConditionFilename, getConditionsFromFile, batchCountCombination, mergeDict
 
 
 class WorkThread(QThread):
@@ -25,25 +23,26 @@ class WorkThread(QThread):
             batchSize = math.ceil(conditionCount / (self.processCount + 1))  # 批次大小（每个进程计算的条件）,加1是因为主进程
 
             countList = Manager().list()  # 多进程共享变量
-            pool = Pool(self.processCount)  # 进程池
-            # 前batchsize个条件留给主进程计算
-            for i in range(batchSize, conditionCount, batchSize):
-                batchConditions = conditions[i: i + batchSize] if i + batchSize < conditionCount else conditions[i:]
-                pool.apply_async(batchCountCombination, args=(batchConditions, countList,))
-            # 主进程计算
-            mainCombinationCount = {}
-            for idx, condition in enumerate(conditions):
-                combinations = genCombinationsWithCondition(condition)
-                for combination in combinations:
-                    mainCombinationCount[combination] = mainCombinationCount.get(combination, 0) + 1
-                self.progress.emit(int((idx + 1) / batchSize * 100) - 1)
-            countList.append(mainCombinationCount)
-            # 等待所有进程运行完毕
-            pool.close()
-            pool.join()
+            with Pool(self.processCount) as pool: # 进程池
+                # 前batchsize个条件留给主进程计算
+                for i in range(batchSize, conditionCount, batchSize):
+                    batchConditions = conditions[i: i + batchSize] if i + batchSize < conditionCount else conditions[i:]
+                    pool.apply_async(batchCountCombination, args=(batchConditions, countList,))
+                # 主进程计算
+                # mainCombinationCount = {}
+                # for idx, condition in enumerate(conditions):
+                #     combinations = genCombinationsWithCondition(condition)
+                #     for combination in combinations:
+                #         mainCombinationCount[combination] = mainCombinationCount.get(combination, 0) + 1
+                #     self.progress.emit(int((idx + 1) / batchSize * 100) - 1)
+                # 等待所有进程运行完毕
+                pool.close()
+                pool.join()
 
             allCombinationCount = mergeDict(countList)  # 每个组合出现的次数
             # 获取文件对应的结果
             for key, value in allCombinationCount.items():
                 if faultRange[0] <= conditionCount - value <= faultRange[1]:
                     result.append(key)
+            print(result)
+            self.progress.emit(100)
