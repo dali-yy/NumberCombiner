@@ -88,7 +88,7 @@ def getResultDifference(results: List[set]) -> set:
     return differentSet
 
 
-def batchCountCombination(conditions: List[dict], countList: List[dict]):
+def batchCountCombination(conditions: List[dict], countList: List[dict], lock):
     """
     多进程批量统计组合数出现次数
     """
@@ -97,8 +97,9 @@ def batchCountCombination(conditions: List[dict], countList: List[dict]):
         combinations = genCombinationsWithCondition(condition)
         for combination in combinations:
             combinationCount[combination] = combinationCount.get(combination, 0) + 1
+    lock.acquire()
     countList.append(combinationCount)
-
+    lock.release()
 
 def mergeDict(dicts):
     """
@@ -109,40 +110,6 @@ def mergeDict(dicts):
     for dictCounter in dictCounters:
         resultCounter += dictCounter
     return dict(resultCounter)
-
-
-def _genCombinationsByFile(filePath: str, processCount: int) -> list:
-    """
-    计算单个文件的结果
-    """
-    result = []  # 最终结果
-
-    faultRange = parseConditionFilename(os.path.basename(filePath))  # 容错范围
-    conditions = getConditionsFromFile(filePath)  # 获取文件中所有条件
-    conditionCount = len(conditions)  # 条件数
-    countList = Manager().list()  # 多进程共享变量
-
-    batchSize = math.ceil(conditionCount / (processCount + 1))  # 批量大小
-    with Pool(processCount) as pool:
-        for i in range(0, conditionCount, batchSize):
-            batchConditions = conditions[i: i + batchSize] if i + batchSize < conditionCount else conditions[i:]
-            pool.apply_async(batchCountCombination, args=(batchConditions, countList))
-        mainCount = {}
-        for condition in tqdm(conditions[0:batchSize]):
-            combinations = genCombinationsWithCondition(condition)
-            for combination in combinations:
-                mainCount[combination] = mainCount.get(combination, 0) + 1
-        countList.append(mainCount)
-        pool.close()
-        pool.join()
-
-    combinationCount = mergeDict(countList)  # 每个组合出现的次数
-
-    for key, value in combinationCount.items():
-        if faultRange[0] <= conditionCount - value <= faultRange[1]:
-            result.append(key)
-
-    return result
 
 
 def genCombinationsByFile(filePath: str, processCount: int) -> list:
@@ -169,7 +136,41 @@ def genCombinationsByFile(filePath: str, processCount: int) -> list:
     for key, value in combinationCount.items():
         if faultRange[0] <= conditionCount - value <= faultRange[1]:
             result.append(key)
+    return result
 
+def _genCombinationsByFile(filePath: str, processCount: int) -> list:
+    """
+    计算单个文件的结果
+    """
+    result = []  # 最终结果
+
+    faultRange = parseConditionFilename(os.path.basename(filePath))  # 容错范围
+    conditions = getConditionsFromFile(filePath)  # 获取文件中所有条件
+    conditionCount = len(conditions)  # 条件数
+
+    manager = Manager()  # 共享管理
+    countList = manager.list()  # 多进程共享变量
+    lock = manager.RLock()  # 共享锁
+
+    batchSize = math.ceil(conditionCount / (processCount + 1))  # 批量大小
+    pool = Pool(processCount)
+    for i in range(batchSize, conditionCount, batchSize):
+        batchConditions = conditions[i: i + batchSize] if i + batchSize < conditionCount else conditions[i:]
+        pool.apply_async(batchCountCombination, args=(batchConditions, countList, lock,))
+    pool.close()
+    mainCount = {}
+    for condition in tqdm(conditions[:batchSize]):
+        combinations = genCombinationsWithCondition(condition)
+        for combination in combinations:
+            mainCount[combination] = mainCount.get(combination, 0) + 1
+    countList.append(mainCount)
+    pool.join()
+
+    combinationCount = mergeDict(countList)  # 每个组合出现的次数
+
+    for key, value in combinationCount.items():
+        if faultRange[0] <= conditionCount - value <= faultRange[1]:
+            result.append(key)
     return result
 
 
@@ -194,8 +195,8 @@ if __name__ == '__main__':
     # print('合并结果')
     # results = genCombinationsWithFault(combinationsList, 0, 5)
     print(datetime.datetime.now())
-    results = _genCombinationsByFile('data/conditions/验证2（0-3）.txt', 10)
+    result = _genCombinationsByFile('data/conditions/验证2（0-3）.txt', 10)
     print(datetime.datetime.now())
-    resultToFile(results, 'data/result/验证2（0-3）.txt')
+    resultToFile(result, 'data/result/验证2（0-3）结果.txt')
     print(datetime.datetime.now())
 

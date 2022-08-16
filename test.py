@@ -1,22 +1,25 @@
+import os
 import time
-from multiprocessing import Pool, Manager
-
-from tqdm import tqdm
+import multiprocessing
 
 
-def count(countList):
-    for i in tqdm(range(100000)):
-        countList[(1, 2, 3)] = countList.get((1, 2, 3), 0) + 1
+def work(count, lock):
+    lock.acquire()  # 加锁，只允许一个进程运行
+    count.append(5)
+    print(count, os.getpid())
+    time.sleep(2)  # 阻塞5s
+    lock.release()  # 解锁
+    return 'result is %s, pid is %s' % (count, os.getpid())
 
 
 if __name__ == '__main__':
+    pool = multiprocessing.Pool(5)  # 创建具有5个进程的进程池
+    manager = multiprocessing.Manager()
+    lock = manager.RLock()
+    count = manager.list()
 
-    countList = Manager().dict() # 多进程共享变量
-
-    pool = Pool(10)
-    for i in range(0, 4):
-        pool.apply_async(count, args=(countList,))
-    countList['a'] = 1
+    results = []
+    for i in range(5):
+        result = pool.apply_async(func=work, args=(count, lock))
     pool.close()
     pool.join()
-    print(countList)

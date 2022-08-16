@@ -1,11 +1,16 @@
 import math
+import os
 from PyQt5.QtCore import QThread, pyqtSignal
 from multiprocessing import Pool, Manager
-from utils import parseConditionFilename, getConditionsFromFile, batchCountCombination, mergeDict
+from constant import STATUS
+from utils import genCombinationsWithCondition, parseConditionFilename, getConditionsFromFile, batchCountCombination, mergeDict, resultToFile
 
 
 class WorkThread(QThread):
     progress = pyqtSignal(int)  # 进度条的值
+    finishedCount = pyqtSignal(int)  # 完成的文件个数
+    fileStatus = pyqtSignal(tuple)  # 文件状态
+    resultPath = pyqtSignal(tuple)  # 结果保存路径
 
     def __init__(self, checkedFiles, resultDir, processCount):
         super().__init__()
@@ -13,36 +18,59 @@ class WorkThread(QThread):
         self.resultDir = resultDir  # 结果保存的文件夹
         self.processCount = processCount  # 进程数
 
-    def run(self):
-        for checkedFile in self.checkedFiles:
-            result = []  # 最终结果
 
+    def run(self):
+        for fileIndex, checkedFile in enumerate(self.checkedFiles):
+            # 修改文件状态为已完成
+            self.fileStatus.emit((checkedFile['id'], STATUS['RUNNING']))
+
+            result = []  # 最终结果
             faultRange = parseConditionFilename(checkedFile['filename'])  # 容错范围
             conditions = getConditionsFromFile(checkedFile['filePath'])  # 获取文件中所有条件
             conditionCount = len(conditions)  # 条件数
-            batchSize = math.ceil(conditionCount / (self.processCount + 1))  # 批次大小（每个进程计算的条件）,加1是因为主进程
 
-            countList = Manager().list()  # 多进程共享变量
-            with Pool(self.processCount) as pool: # 进程池
-                # 前batchsize个条件留给主进程计算
-                for i in range(batchSize, conditionCount, batchSize):
-                    batchConditions = conditions[i: i + batchSize] if i + batchSize < conditionCount else conditions[i:]
-                    pool.apply_async(batchCountCombination, args=(batchConditions, countList,))
-                # 主进程计算
-                # mainCombinationCount = {}
-                # for idx, condition in enumerate(conditions):
-                #     combinations = genCombinationsWithCondition(condition)
-                #     for combination in combinations:
-                #         mainCombinationCount[combination] = mainCombinationCount.get(combination, 0) + 1
-                #     self.progress.emit(int((idx + 1) / batchSize * 100) - 1)
-                # 等待所有进程运行完毕
-                pool.close()
-                pool.join()
+            manager = Manager()  # 共享管理
+            countList = manager.list()  # 多进程共享变量
+            lock = manager.RLock()  # 共享锁
 
-            allCombinationCount = mergeDict(countList)  # 每个组合出现的次数
-            # 获取文件对应的结果
-            for key, value in allCombinationCount.items():
+            batchSize = math.ceil(conditionCount / (self.processCount + 1))  # 批量大小
+
+            pool = Pool(self.processCount)  # 进程池
+            # 添加进程，每个进程运行batchSize个条件
+            for i in range(batchSize, conditionCount, batchSize):
+                batchConditions = conditions[i: i + batchSize] if i + batchSize < conditionCount else conditions[i:]
+                pool.apply_async(batchCountCombination, args=(batchConditions, countList, lock,))
+            # 关闭进程池，不能再加入新的进程
+            pool.close()
+            # 主进程运行，主要是为了监控进度
+            mainCount = {}
+            for idx, condition in enumerate(conditions[:batchSize]):
+                combinations = genCombinationsWithCondition(condition)
+                for combination in combinations:
+                    mainCount[combination] = mainCount.get(combination, 0) + 1
+                self.progress.emit(int((idx + 1) / batchSize * 100) - 1)
+            countList.append(mainCount)
+            # 主线程等待进程池所有进程退出
+            pool.join()
+
+            # 计算结果（判断次数是否在重复数范围内）
+            combinationCount = mergeDict(countList)
+            for key, value in combinationCount.items():
                 if faultRange[0] <= conditionCount - value <= faultRange[1]:
                     result.append(key)
-            print(result)
+            # 进程条100%
             self.progress.emit(100)
+
+            # 将结果写入写入文件
+            prefix, suffix = os.path.splitext(checkedFile['filename'])
+            resultFileName = prefix + '结果' + suffix  # 结果文件名
+            resultFilePath = os.path.join(self.resultDir, resultFileName)  # 结果文件路径
+            # 将结果写入文件
+            resultToFile(result, resultFilePath)
+            self.resultPath.emit((checkedFile['id'], resultFilePath))
+            # 修改文件状态为已完成
+            self.fileStatus.emit((checkedFile['id'], STATUS['FINISHED']))
+            # 文件完成计算个数加1
+            self.finishedCount.emit(fileIndex + 1)
+ 
+            
