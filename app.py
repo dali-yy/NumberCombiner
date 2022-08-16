@@ -435,6 +435,7 @@ class MainUi(QMainWindow):
         # 开启子线程计算条件
         self.workThread = WorkThread(checkedConditionFiles, self.resultDir, processCount)
         self.workThread.progress.connect(self.onProgressChanged)
+        self.workThread.fileStatus.connect(self.onFileStatusChanged)
         self.workThread.finishedCount.connect(self.onFinishedCountChanged)
         self.workThread.start()
 
@@ -459,7 +460,7 @@ class MainUi(QMainWindow):
         if status == self.checkedCount:
             QMessageBox.information(self, '提示', '全部文件已计算完成！', QMessageBox.Yes, QMessageBox.Yes)
 
-    def onStatusChanged(self, status):
+    def onFileStatusChanged(self, status):
         """
         文件状态改变时
         """
