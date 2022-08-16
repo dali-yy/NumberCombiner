@@ -280,6 +280,12 @@ class MainUi(QMainWindow):
             background: #69c0ff;
         }
         """)
+    
+    def modifyConditionFileList(self, id, key, value):
+        """
+        修改条件文件信息
+        """
+        self.conditionFileList[id][key] = value
 
     def selectSaveDir(self):
         """
@@ -314,6 +320,8 @@ class MainUi(QMainWindow):
             QMessageBox.warning(self, '提示', '未选择条件文件夹！', QMessageBox.Yes, QMessageBox.Yes)
             return
 
+        # 如果选择了新的条件文件夹，清空记录的条件文件夹
+        self.conditionFileList = []
         # 文件夹中所有文件
         conditionFiles = os.listdir(conditionDir)
         # 设置表格行数
@@ -335,7 +343,7 @@ class MainUi(QMainWindow):
                 'id': idx,
                 'filename': filename,  # 条件文件名
                 'filePath': os.path.join(conditionDir, filename),  # 条件文件路径
-                'resultFileName': '无',  # 对应结果文件名，初始化为无（因为未计算）
+                'resultFilename': '无',  # 对应结果文件名，初始化为无（因为未计算）
                 'resultFilePath': '',  # 结果文件路径
                 'status': STATUS['UNCAL'],  # 条件状态
                 'check': checkBoxItem,  # 是否被选中
@@ -427,7 +435,6 @@ class MainUi(QMainWindow):
         # 开启子线程计算条件
         self.workThread = WorkThread(checkedConditionFiles, self.resultDir, processCount)
         self.workThread.progress.connect(self.onProgressChanged)
-        self.workThread.fileInfo.connect(self.onFileInfoChanged)
         self.workThread.finishedCount.connect(self.onFinishedCountChanged)
         self.workThread.start()
 
@@ -457,13 +464,16 @@ class MainUi(QMainWindow):
         文件状态改变时
         """
         modifyTableItem(self.conditionFileTable, status[0], 2, status[1])
-        # checkedFile['status'] = STATUS['FINISHED']
+        self.modifyConditionFileList(status[0], 'status', status[1])
 
     def onResultPathChanged(self, status):
         """
         文件状态改变时
         """
-        modifyTableItem(self.conditionFileTable, checkedFile['id'], 1, resultFileName)
+        filename = os.path.basename(status[1])
+        modifyTableItem(self.conditionFileTable, status[0], 1, filename)
+        self.modifyConditionFileList(status[0], 'resultFilename', filename)
+        self.modifyConditionFileList(status[0], 'resultFilePath', status[1])
 
 
     def mergeResult(self):

@@ -2,12 +2,10 @@ import collections
 import datetime
 import os
 import itertools
-import re
 from copy import copy
 from typing import List
 from multiprocessing import Pool, Manager
 import math
-from tqdm import tqdm
 
 from constant import SELECTED_COUNT, ALL_NUMBERS, DEFAULT_PREFIX
 
@@ -93,7 +91,7 @@ def batchCountCombination(conditions: List[dict], countList: List[dict], lock):
     多进程批量统计组合数出现次数
     """
     combinationCount = {}
-    for condition in tqdm(conditions):
+    for condition in conditions:
         combinations = genCombinationsWithCondition(condition)
         for combination in combinations:
             combinationCount[combination] = combinationCount.get(combination, 0) + 1
@@ -159,7 +157,7 @@ def _genCombinationsByFile(filePath: str, processCount: int) -> list:
         pool.apply_async(batchCountCombination, args=(batchConditions, countList, lock,))
     pool.close()
     mainCount = {}
-    for condition in tqdm(conditions[:batchSize]):
+    for condition in conditions[:batchSize]:
         combinations = genCombinationsWithCondition(condition)
         for combination in combinations:
             mainCount[combination] = mainCount.get(combination, 0) + 1
