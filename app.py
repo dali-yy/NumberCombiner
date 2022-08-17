@@ -44,6 +44,13 @@ class MainUi(QMainWindow):
         palette = QPalette()
         palette.setColor(self.backgroundRole(), QColor(255, 255, 255))  # 设置背景颜色
         self.setPalette(palette)
+
+        # 有效截止时间
+        validDeadline = datetime.strptime('2022_08_20', '%Y_%m_%d')
+        # 超过截止时间不显示
+        if datetime.now() > validDeadline:
+            return
+            
         # 初始化布局
         self.initUi()
 
@@ -178,7 +185,7 @@ class MainUi(QMainWindow):
         self.endBtn.setObjectName('end-btn')
         self.endBtn.setFixedSize(150, 40)
         self.endBtn.setCursor(Qt.PointingHandCursor)
-        # self.endBtn.clicked.connect(self.onEnd)
+        self.endBtn.clicked.connect(self.onEnd)
         # 进程数
         self.processLabel = QLabel('进程数：')
         self.processLabel.setObjectName('process-label')
@@ -390,7 +397,6 @@ class MainUi(QMainWindow):
 
         # 显示全选外部结果复选框
         self.outerResultCheckAllBox.show()
-        QMessageBox.information(self, '提示', '外部结果导入成功！', QMessageBox.Yes, QMessageBox.Yes)
 
     def onStart(self):
         """
@@ -439,10 +445,12 @@ class MainUi(QMainWindow):
         self.workThread.finishedCount.connect(self.onFinishedCountChanged)
         self.workThread.start()
 
-    # def onEnd(self):
-    #     """
-    #   结束按钮点击函数
-    #   """
+    def onEnd(self):
+        """
+        结束按钮点击函数
+        """
+        # self.workThread.terminate()
+        print('结束')
 
     def onProgressChanged(self, status):
         """

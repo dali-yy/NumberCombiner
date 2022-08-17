@@ -26,6 +26,10 @@ class WorkThread(QThread):
 
             result = []  # 最终结果
             faultRange = parseConditionFilename(checkedFile['filename'])  # 容错范围
+            # 文件名不规范
+            if faultRange is None:
+                self.fileStatus.emit((checkedFile['id'], STATUS['FAILED']))
+                continue
             conditions = getConditionsFromFile(checkedFile['filePath'])  # 获取文件中所有条件
             conditionCount = len(conditions)  # 条件数
 

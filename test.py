@@ -1,5 +1,7 @@
-from datetime import date, datetime
+from datetime import datetime
 
 
 if __name__ == '__main__':
-    print(datetime.now())
+    a = datetime.now()
+    b = datetime.strptime('2022_08_17', '%Y_%m_%d')
+    print(a > b)
