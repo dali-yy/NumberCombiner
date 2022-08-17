@@ -1,7 +1,6 @@
-from datetime import datetime
 
 
 if __name__ == '__main__':
-    a = datetime.now()
-    b = datetime.strptime('2022_08_17', '%Y_%m_%d')
-    print(a > b)
+    a = [(1, 2, 3), (1, 1, 3), (3, 1, 2), (2, 1, 3)]
+    a.sort()
+    print(a)

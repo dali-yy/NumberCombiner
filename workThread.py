@@ -39,13 +39,13 @@ class WorkThread(QThread):
 
             batchSize = math.ceil(conditionCount / (self.processCount + 1))  # 批量大小
 
-            pool = Pool(self.processCount)  # 进程池
+            self.pool = Pool(self.processCount)  # 进程池
             # 添加进程，每个进程运行batchSize个条件
             for i in range(batchSize, conditionCount, batchSize):
                 batchConditions = conditions[i: i + batchSize] if i + batchSize < conditionCount else conditions[i:]
-                pool.apply_async(batchCountCombination, args=(batchConditions, countList, lock,))
+                self.pool.apply_async(batchCountCombination, args=(batchConditions, countList, lock,))
             # 关闭进程池，不能再加入新的进程
-            pool.close()
+            self.pool.close()
             # 主进程运行，主要是为了监控进度
             mainCount = {}
             for idx, condition in enumerate(conditions[:batchSize]):
@@ -55,22 +55,24 @@ class WorkThread(QThread):
                 self.progress.emit(int((idx + 1) / batchSize * 100) - 1)
             countList.append(mainCount)
             # 主线程等待进程池所有进程退出
-            pool.join()
+            self.pool.join()
 
             # 计算结果（判断次数是否在重复数范围内）
             combinationCount = mergeDict(countList)
             for key, value in combinationCount.items():
                 if faultRange[0] <= conditionCount - value <= faultRange[1]:
                     result.append(key)
-            # 进程条100%
-            self.progress.emit(100)
-
             # 将结果写入写入文件
             prefix, suffix = os.path.splitext(checkedFile['filename'])
             resultFileName = prefix + '结果' + suffix  # 结果文件名
             resultFilePath = os.path.join(self.resultDir, resultFileName)  # 结果文件路径
+            # 对结果进行排序
+            result.sort()
             # 将结果写入文件
             resultToFile(result, resultFilePath)
+            # 进程条100%
+            self.progress.emit(100)
+            # 结果文件路径
             self.resultPath.emit((checkedFile['id'], resultFilePath))
             # 修改文件状态为已完成
             self.fileStatus.emit((checkedFile['id'], STATUS['FINISHED']))

@@ -185,6 +185,7 @@ class MainUi(QMainWindow):
         self.endBtn.setObjectName('end-btn')
         self.endBtn.setFixedSize(150, 40)
         self.endBtn.setCursor(Qt.PointingHandCursor)
+        self.endBtn.hide()  # 初始不显示结束按钮，等开始就算才显示
         self.endBtn.clicked.connect(self.onEnd)
         # 进程数
         self.processLabel = QLabel('进程数：')
@@ -192,7 +193,7 @@ class MainUi(QMainWindow):
         # 进程数选择
         self.processSpin = QSpinBox()
         self.processSpin.setObjectName('process-spin')
-        self.processSpin.setMaximum(20)
+        self.processSpin.setMaximum(100)
         self.processSpin.setMinimum(1)
         self.processSpin.setValue(10)
 
@@ -225,7 +226,6 @@ class MainUi(QMainWindow):
         module1Layout.addWidget(self.module1ContentFrame, 2, 0, 20, 24)
         module1Layout.addWidget(self.startBtn, 22, 0, 2, 4, alignment=Qt.AlignLeft)
         module1Layout.addWidget(self.endBtn, 22, 4, 2, 4, alignment=Qt.AlignLeft)
-        # module1Layout.addWidget(self.endBtn, 22, 8, 2, 4, alignment=Qt.AlignLeft)
         module1Layout.addWidget(self.processLabel, 22, 10, 2, 2, alignment=Qt.AlignRight)
         module1Layout.addWidget(self.processSpin, 22, 12, 2, 2, alignment=Qt.AlignLeft)
         module1Layout.addWidget(self.faultLabel, 22, 15, 2, 1)
@@ -431,10 +431,12 @@ class MainUi(QMainWindow):
         if not os.path.exists(self.resultDir):
             QMessageBox.warning(self, '提示', '结果文件夹已不存在（被误删）！', QMessageBox.Yes, QMessageBox.Yes)
             return
+        
+        # 显示结束按钮
+        self.endBtn.show()  
 
         # 进程数
         processCount = self.processSpin.value()
-
         # 选中的文件数
         self.checkedCount = len(checkedConditionFiles)
         self.finishedLabel.setText('已完成 {:d}/{:d}'.format(0, self.checkedCount))
@@ -444,13 +446,6 @@ class MainUi(QMainWindow):
         self.workThread.fileStatus.connect(self.onFileStatusChanged)
         self.workThread.finishedCount.connect(self.onFinishedCountChanged)
         self.workThread.start()
-
-    def onEnd(self):
-        """
-        结束按钮点击函数
-        """
-        # self.workThread.terminate()
-        print('结束')
 
     def onProgressChanged(self, status):
         """
@@ -483,6 +478,22 @@ class MainUi(QMainWindow):
         modifyTableItem(self.conditionFileTable, status[0], 1, filename)
         self.modifyConditionFileList(status[0], 'resultFilename', filename)
         self.modifyConditionFileList(status[0], 'resultFilePath', status[1])
+
+    def onEnd(self):
+        """
+        结束按钮点击函数
+        """
+        self.workThread.pool.terminate()  # 终止进程
+        self.workThread.terminate()  # 终止线程
+        self.calProgressBar.setValue(0)  # 进度条清空
+
+        # 修改未计算文件状态
+        for item in self.conditionFileList:
+            if item['status'] in [STATUS['WAITING'], STATUS['RUNNING']]:
+                item['status'] = STATUS['UNCAL']
+                modifyTableItem(self.conditionFileTable, item['id'], 2, STATUS['UNCAL'])
+
+        QMessageBox.information(self, '提示', '计算已终止！！！', QMessageBox.Yes, QMessageBox.Yes)
 
 
     def mergeResult(self):
