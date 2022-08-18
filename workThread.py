@@ -38,6 +38,9 @@ class WorkThread(QThread):
             lock = manager.RLock()  # 共享锁
 
             batchSize = math.ceil(conditionCount / (self.processCount + 1))  # 批量大小
+            # 批量大小不能小于等于0
+            if batchSize <= 0:
+                return
 
             self.pool = Pool(self.processCount)  # 进程池
             # 添加进程，每个进程运行batchSize个条件

@@ -1,12 +1,9 @@
 import collections
-import datetime
 import os
 import re
 import itertools
 from copy import copy
 from typing import List
-from multiprocessing import Pool, Manager
-import math
 
 from constant import SELECTED_COUNT, ALL_NUMBERS, DEFAULT_PREFIX
 
@@ -111,66 +108,66 @@ def mergeDict(dicts):
     return dict(resultCounter)
 
 
-def genCombinationsByFile(filePath: str, processCount: int) -> list:
-    """
-    计算单个文件的结果
-    """
-    result = []  # 最终结果
+# def genCombinationsByFile(filePath: str, processCount: int) -> list:
+#     """
+#     计算单个文件的结果
+#     """
+#     result = []  # 最终结果
 
-    faultRange = parseConditionFilename(os.path.basename(filePath))  # 容错范围
-    conditions = getConditionsFromFile(filePath)  # 获取文件中所有条件
-    conditionCount = len(conditions)  # 条件数
-    countList = Manager().list()  # 多进程共享变量
+#     faultRange = parseConditionFilename(os.path.basename(filePath))  # 容错范围
+#     conditions = getConditionsFromFile(filePath)  # 获取文件中所有条件
+#     conditionCount = len(conditions)  # 条件数
+#     countList = Manager().list()  # 多进程共享变量
 
-    batchSize = math.ceil(conditionCount / processCount)  # 批量大小
-    pool = Pool(processCount)
-    for i in range(0, conditionCount, batchSize):
-        batchConditions = conditions[i: i + batchSize] if i + batchSize < conditionCount else conditions[i:]
-        pool.apply_async(batchCountCombination, args=(batchConditions, countList))
-    pool.close()
-    pool.join()
+#     batchSize = math.ceil(conditionCount / processCount)  # 批量大小
+#     pool = Pool(processCount)
+#     for i in range(0, conditionCount, batchSize):
+#         batchConditions = conditions[i: i + batchSize] if i + batchSize < conditionCount else conditions[i:]
+#         pool.apply_async(batchCountCombination, args=(batchConditions, countList))
+#     pool.close()
+#     pool.join()
 
-    combinationCount = mergeDict(countList)  # 每个组合出现的次数
+#     combinationCount = mergeDict(countList)  # 每个组合出现的次数
 
-    for key, value in combinationCount.items():
-        if faultRange[0] <= conditionCount - value <= faultRange[1]:
-            result.append(key)
-    return result
+#     for key, value in combinationCount.items():
+#         if faultRange[0] <= conditionCount - value <= faultRange[1]:
+#             result.append(key)
+#     return result
 
-def _genCombinationsByFile(filePath: str, processCount: int) -> list:
-    """
-    计算单个文件的结果
-    """
-    result = []  # 最终结果
+# def _genCombinationsByFile(filePath: str, processCount: int) -> list:
+#     """
+#     计算单个文件的结果
+#     """
+#     result = []  # 最终结果
 
-    faultRange = parseConditionFilename(os.path.basename(filePath))  # 容错范围
-    conditions = getConditionsFromFile(filePath)  # 获取文件中所有条件
-    conditionCount = len(conditions)  # 条件数
+#     faultRange = parseConditionFilename(os.path.basename(filePath))  # 容错范围
+#     conditions = getConditionsFromFile(filePath)  # 获取文件中所有条件
+#     conditionCount = len(conditions)  # 条件数
 
-    manager = Manager()  # 共享管理
-    countList = manager.list()  # 多进程共享变量
-    lock = manager.RLock()  # 共享锁
+#     manager = Manager()  # 共享管理
+#     countList = manager.list()  # 多进程共享变量
+#     lock = manager.RLock()  # 共享锁
 
-    batchSize = math.ceil(conditionCount / (processCount + 1))  # 批量大小
-    pool = Pool(processCount)
-    for i in range(batchSize, conditionCount, batchSize):
-        batchConditions = conditions[i: i + batchSize] if i + batchSize < conditionCount else conditions[i:]
-        pool.apply_async(batchCountCombination, args=(batchConditions, countList, lock,))
-    pool.close()
-    mainCount = {}
-    for condition in conditions[:batchSize]:
-        combinations = genCombinationsWithCondition(condition)
-        for combination in combinations:
-            mainCount[combination] = mainCount.get(combination, 0) + 1
-    countList.append(mainCount)
-    pool.join()
+#     batchSize = math.ceil(conditionCount / (processCount + 1))  # 批量大小
+#     pool = Pool(processCount)
+#     for i in range(batchSize, conditionCount, batchSize):
+#         batchConditions = conditions[i: i + batchSize] if i + batchSize < conditionCount else conditions[i:]
+#         pool.apply_async(batchCountCombination, args=(batchConditions, countList, lock,))
+#     pool.close()
+#     mainCount = {}
+#     for condition in conditions[:batchSize]:
+#         combinations = genCombinationsWithCondition(condition)
+#         for combination in combinations:
+#             mainCount[combination] = mainCount.get(combination, 0) + 1
+#     countList.append(mainCount)
+#     pool.join()
 
-    combinationCount = mergeDict(countList)  # 每个组合出现的次数
+#     combinationCount = mergeDict(countList)  # 每个组合出现的次数
 
-    for key, value in combinationCount.items():
-        if faultRange[0] <= conditionCount - value <= faultRange[1]:
-            result.append(key)
-    return result
+#     for key, value in combinationCount.items():
+#         if faultRange[0] <= conditionCount - value <= faultRange[1]:
+#             result.append(key)
+#     return result
 
 
 def resultToFile(result: list, savaPath: str) -> None:
@@ -182,20 +179,5 @@ def resultToFile(result: list, savaPath: str) -> None:
 
 
 if __name__ == '__main__':
-    # conditionText = 'hqdm_0_0_hqdm_0_1_0_01,02,03-2'
-    # conditionText = 'hqdm_0_0_hqdm_0_1_0_23,24,25-0,2'
-    # condition = parseConditionText(conditionText)
-    # combinations = genCombinationsWithSingle(condition)
-    # print(list(combinations)[0])
-    # print(len(combinations))
-    # conditions = getConditionsFromFile('data\conditions\TEST002 (0-0）.txt')
-    # print('条件计算')
-    # combinationsList = _genCombinationsWithMultiple(conditions)
-    # print('合并结果')
-    # results = genCombinationsWithFault(combinationsList, 0, 5)
-    print(datetime.datetime.now())
-    result = _genCombinationsByFile('data/conditions/验证2（0-3）.txt', 10)
-    print(datetime.datetime.now())
-    resultToFile(result, 'data/result/验证2（0-3）结果.txt')
-    print(datetime.datetime.now())
+    pass
 

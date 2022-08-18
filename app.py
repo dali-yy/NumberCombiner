@@ -44,13 +44,6 @@ class MainUi(QMainWindow):
         palette = QPalette()
         palette.setColor(self.backgroundRole(), QColor(255, 255, 255))  # 设置背景颜色
         self.setPalette(palette)
-
-        # 有效截止时间
-        validDeadline = datetime.strptime('2022_08_20', '%Y_%m_%d')
-        # 超过截止时间不显示
-        if datetime.now() > validDeadline:
-            return
-            
         # 初始化布局
         self.initUi()
 
@@ -444,6 +437,7 @@ class MainUi(QMainWindow):
         self.workThread = WorkThread(checkedConditionFiles, self.resultDir, processCount)
         self.workThread.progress.connect(self.onProgressChanged)
         self.workThread.fileStatus.connect(self.onFileStatusChanged)
+        self.workThread.resultPath.connect(self.onResultPathChanged)
         self.workThread.finishedCount.connect(self.onFinishedCountChanged)
         self.workThread.start()
 
@@ -527,12 +521,21 @@ class MainUi(QMainWindow):
         if faultRight > checkCount:
             QMessageBox.warning(self, '提示', '容错范围右边界不能大于选中的合并结果个数！', QMessageBox.Yes, QMessageBox.Yes)
             return
-
+        combinationCount = {}  # 记录重复次数
         # 读取结果文件内容
-        combinationCount = {}
         for idx, filePath in enumerate(checkedResultFiles):
+            # 判断文件是否存在
+            if not os.path.exists(filePath):
+                QMessageBox.warning(self, '提示', '文件{}不存在！'.format(filePath), QMessageBox.Yes, QMessageBox.Yes)
+                return
             with open(filePath, mode='r', encoding='utf8') as rf:
-                for combination in [tuple(line.strip('\n').split(' ')) for line in rf.readlines()]:
+                # 判断文件格式是否能被解析
+                try:
+                    combinations = [tuple(line.strip('\n').split(' ')) for line in rf.readlines()]
+                except:
+                    QMessageBox.warning(self, '提示', '文件{}格式存在问题！'.format(filePath), QMessageBox.Yes, QMessageBox.Yes)
+                    return
+                for combination in combinations:
                     combinationCount[combination] = combinationCount.get(combination, 0) + 1
             self.mergeProgressBar.setValue(int((idx + 1) / checkCount * 100) - 1)
             QApplication.processEvents()  # 读取完文件后刷新屏幕，防止卡频
@@ -542,6 +545,7 @@ class MainUi(QMainWindow):
         for key, value in combinationCount.items():
             if faultLeft <= checkCount - value <= faultRight:
                 mergeResult.append(key)
+        mergeResult.sort()  # 结果排序
 
         # 记录合并结果
         self.finalResult = mergeResult
