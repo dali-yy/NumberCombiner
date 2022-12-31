@@ -57,17 +57,11 @@ class MainUi(QMainWindow):
 
         # 模块1部件
         self.module1Widget = QWidget()
-        # 模块2部件
-        self.module2Widget = QWidget()
 
         # 设置中心部件布局
         centerLayout = QGridLayout()
         centerLayout.addWidget(self.module1Widget, 0, 0, 0, 0)
-        centerLayout.addWidget(self.module2Widget, 0, 0, 0, 0)
         self.centerWidget.setLayout(centerLayout)
-
-        # 模块2部件初始不可见
-        self.module2Widget.hide()
 
         # *************************** 模块1界面布局 *****************************
         # 设置结果文件夹按钮
@@ -280,7 +274,7 @@ class MainUi(QMainWindow):
             background: #69c0ff;
         }
         """)
-    
+
     def modifyConditionFileList(self, id, key, value):
         """
         修改条件文件信息
@@ -424,9 +418,9 @@ class MainUi(QMainWindow):
         if not os.path.exists(self.resultDir):
             QMessageBox.warning(self, '提示', '结果文件夹已不存在（被误删）！', QMessageBox.Yes, QMessageBox.Yes)
             return
-        
+
         # 显示结束按钮
-        self.endBtn.show()  
+        self.endBtn.show()
 
         # 进程数
         processCount = self.processSpin.value()
@@ -488,7 +482,6 @@ class MainUi(QMainWindow):
                 modifyTableItem(self.conditionFileTable, item['id'], 2, STATUS['UNCAL'])
 
         QMessageBox.information(self, '提示', '计算已终止！！！', QMessageBox.Yes, QMessageBox.Yes)
-
 
     def mergeResult(self):
         """

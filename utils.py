@@ -1,5 +1,6 @@
 import collections
 import os
+import random
 import re
 import itertools
 from copy import copy
@@ -8,9 +9,9 @@ from typing import List
 from constant import SELECTED_COUNT, ALL_NUMBERS, DEFAULT_PREFIX
 
 
-def parseConditionFilename(filename: str) -> list:
+def parseCondFilename(filename: str) -> list:
     """
-    解析条件文件名
+    解析条件文件名，获取容错范围
     """
     pattern = r'[(（][0-9]+-[0-9]+[）)]'
     prefix = os.path.splitext(filename)[0].strip()
@@ -18,7 +19,7 @@ def parseConditionFilename(filename: str) -> list:
     return [int(i) for i in result.group()[1: -1].split('-')] if result else None
 
 
-def parseConditionText(conditionText: str) -> dict:
+def parseCondText(conditionText: str) -> dict:
     """
     解析单个条件文本
     """
@@ -38,7 +39,7 @@ def parseConditionText(conditionText: str) -> dict:
     return condition
 
 
-def getConditionsFromFile(filePath: str) -> List[dict]:
+def getCondFromFile(filePath: str) -> List[dict]:
     """
     从 txt 文件中获取所有条件
     """
@@ -49,13 +50,13 @@ def getConditionsFromFile(filePath: str) -> List[dict]:
         for line in rf.readlines():
             # 以默认前缀开头，说明是条件文本
             if line.startswith(DEFAULT_PREFIX):
-                conditions.append(parseConditionText(line.strip().strip('\n')))
+                conditions.append(parseCondText(line.strip().strip('\n')))
     return conditions
 
 
-def genCombinationsWithCondition(condition: dict) -> set:
+def genCombinations(condition: dict) -> set:
     """
-    单个条件限制下生成数字组合
+    生成数字组合（单个条件）
     """
     combinations = set()  # 满足该条件的所有数字组合
 
@@ -84,18 +85,87 @@ def getResultDifference(results: List[set]) -> set:
     return differentSet
 
 
-def batchCountCombination(conditions: List[dict], countList: List[dict], lock):
+def genAndMergeCombinations(conditions: List[dict], faultRange: list):
     """
-    多进程批量统计组合数出现次数
+    多条件生成组合数，根据容错范围合并
+    :param conditions: 条件
+    :param faultRange: 容错范围
+    :return:
     """
-    combinationCount = {}
+    combinationCnt = {}
     for condition in conditions:
-        combinations = genCombinationsWithCondition(condition)
+        combinations = genCombinations(condition)
         for combination in combinations:
-            combinationCount[combination] = combinationCount.get(combination, 0) + 1
-    lock.acquire()
-    countList.append(combinationCount)
-    lock.release()
+            combinationCnt[combination] = combinationCnt.get(combination, 0) + 1
+    result = []  # 最终结果
+    for key, value in combinationCnt.items():
+        if faultRange[0] <= len(conditions) - value <= faultRange[1]:
+            result.append(key)
+    # 对结果进行排序
+    result.sort()
+    return result
+
+
+def genRangeLine(conditions: List[dict], start: int, lineCnt: int, faultRange: list, filename: str, resultDir: str):
+    """
+    范围行计算
+    :param filename:
+    :param lineCnt:
+    :param resultDir:
+    :param conditions:
+    :param start:
+    :param faultRange:
+    :return:
+    """
+    end = start + lineCnt
+    result = genAndMergeCombinations(conditions[start: end], faultRange)
+    prefix, suffix = os.path.splitext(filename)
+    resultFilename = f'{prefix}结果（{start + 1}-{end}）行={len(result)}{suffix}'
+    resultPath = os.path.join(resultDir, resultFilename)
+    resultToFile(result, resultPath)
+
+
+def genRandomLine(conditions: List[dict], lineCnt: int, faultRange: list, filename: str, resultDir: str):
+    """
+    随机行计算
+    :param filename:
+    :param lineCnt:
+    :param resultDir:
+    :param conditions:
+    :param faultRange:
+    :return:
+    """
+    index = random.sample(range(len(conditions)), lineCnt)
+    index.sort()
+    result = genAndMergeCombinations([conditions[i] for i in index], faultRange)
+    prefix, suffix = os.path.splitext(filename)
+    resultFilename = f'{prefix}结果（{".".join([str(i+1) for i in index])}）行={len(result)}{suffix}'
+    resultPath = os.path.join(resultDir, resultFilename)
+    resultToFile(result, resultPath)
+
+
+def getResultsFromFile(filePath: str):
+    """
+    从文件中获取结果
+    :param filePath: 结果文件
+    :return:
+    """
+    # 文件不存在，返回空列表
+    if not os.path.exists(filePath):
+        return []
+    with open(filePath, mode='r', encoding='utf8') as rf:
+        # 判断文件格式是否能被解析
+        combinations = [tuple(line.split(' ')) for line in rf.read().strip('\n').split('\n')]
+    return combinations
+
+
+def resultToFile(result: list, savaPath: str) -> None:
+    """
+    将结果写入文件
+    """
+    with open(savaPath, mode='w', encoding='utf8') as wf:
+        wf.write('\n'.join(' '.join(item) for item in result))
+
 
 def mergeDict(dicts):
     """
@@ -108,76 +178,6 @@ def mergeDict(dicts):
     return dict(resultCounter)
 
 
-# def genCombinationsByFile(filePath: str, processCount: int) -> list:
-#     """
-#     计算单个文件的结果
-#     """
-#     result = []  # 最终结果
-
-#     faultRange = parseConditionFilename(os.path.basename(filePath))  # 容错范围
-#     conditions = getConditionsFromFile(filePath)  # 获取文件中所有条件
-#     conditionCount = len(conditions)  # 条件数
-#     countList = Manager().list()  # 多进程共享变量
-
-#     batchSize = math.ceil(conditionCount / processCount)  # 批量大小
-#     pool = Pool(processCount)
-#     for i in range(0, conditionCount, batchSize):
-#         batchConditions = conditions[i: i + batchSize] if i + batchSize < conditionCount else conditions[i:]
-#         pool.apply_async(batchCountCombination, args=(batchConditions, countList))
-#     pool.close()
-#     pool.join()
-
-#     combinationCount = mergeDict(countList)  # 每个组合出现的次数
-
-#     for key, value in combinationCount.items():
-#         if faultRange[0] <= conditionCount - value <= faultRange[1]:
-#             result.append(key)
-#     return result
-
-# def _genCombinationsByFile(filePath: str, processCount: int) -> list:
-#     """
-#     计算单个文件的结果
-#     """
-#     result = []  # 最终结果
-
-#     faultRange = parseConditionFilename(os.path.basename(filePath))  # 容错范围
-#     conditions = getConditionsFromFile(filePath)  # 获取文件中所有条件
-#     conditionCount = len(conditions)  # 条件数
-
-#     manager = Manager()  # 共享管理
-#     countList = manager.list()  # 多进程共享变量
-#     lock = manager.RLock()  # 共享锁
-
-#     batchSize = math.ceil(conditionCount / (processCount + 1))  # 批量大小
-#     pool = Pool(processCount)
-#     for i in range(batchSize, conditionCount, batchSize):
-#         batchConditions = conditions[i: i + batchSize] if i + batchSize < conditionCount else conditions[i:]
-#         pool.apply_async(batchCountCombination, args=(batchConditions, countList, lock,))
-#     pool.close()
-#     mainCount = {}
-#     for condition in conditions[:batchSize]:
-#         combinations = genCombinationsWithCondition(condition)
-#         for combination in combinations:
-#             mainCount[combination] = mainCount.get(combination, 0) + 1
-#     countList.append(mainCount)
-#     pool.join()
-
-#     combinationCount = mergeDict(countList)  # 每个组合出现的次数
-
-#     for key, value in combinationCount.items():
-#         if faultRange[0] <= conditionCount - value <= faultRange[1]:
-#             result.append(key)
-#     return result
-
-
-def resultToFile(result: list, savaPath: str) -> None:
-    """
-    将结果写入文件
-    """
-    with open(savaPath, mode='w', encoding='utf8') as wf:
-        wf.write('\n'.join(' '.join(item) for item in result))
-
-
 if __name__ == '__main__':
-    pass
-
+    conditions = getCondFromFile('./data/conditions/验证2（0-3）.txt')
+    print(len(conditions))
