@@ -150,10 +150,10 @@ class MainUi(QMainWindow):
         self.faultLabel = QLabel('容错：')
         self.faultLabel.setObjectName('fault-label')
         # 容错左边界
-        self.faultLeftSpin = QSpinBox()
+        self.faultLeftSpin = SpinBox(0, 0, 10000)
         self.faultLeftSpin.setObjectName('fault-spin')
         # 容错右边界
-        self.faultRightSpin = QSpinBox()
+        self.faultRightSpin = SpinBox(0, 0, 10000)
         self.faultRightSpin.setObjectName('fault-spin')
         # 随机组合选择
         self.randomMergeCheckBox = QCheckBox('随机')

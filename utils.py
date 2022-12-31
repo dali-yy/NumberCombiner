@@ -159,6 +159,29 @@ def getResultsFromFile(filePath: str):
     return combinations
 
 
+def mergeResultFiles(resultFiles, faultRange):
+    """
+    合并结果文件
+    :param resultFiles:
+    :param faultRange:
+    :return:
+    """
+    combinationCount = {}
+    fileCnt = len(resultFiles)  # 基础结果文件个数
+    # 读取结果文件内容
+    for idx, filePath in enumerate(resultFiles):
+        for combination in getResultsFromFile(filePath):
+            combinationCount[combination] = combinationCount.get(combination, 0) + 1
+    # 合并的结果
+    mergeResult = []
+    faultLeft, faultRight = faultRange
+    for key, value in combinationCount.items():
+        if faultLeft <= fileCnt - value <= faultRight:
+            mergeResult.append(key)
+    mergeResult.sort()  # 结果排序
+    return mergeResult
+
+
 def resultToFile(result: list, savaPath: str) -> None:
     """
     将结果写入文件

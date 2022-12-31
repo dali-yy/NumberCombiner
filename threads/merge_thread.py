@@ -5,41 +5,43 @@
 # @File : merge_thread.py
 # @Software: PyCharm
 import math
-import os
 import random
-
+import os
 from PyQt5.QtCore import QThread, pyqtSignal
 from multiprocessing import Pool, Manager
 from constant import MERGE_TYPE
-from utils import getResultsFromFile, resultToFile
+from utils import mergeResultFiles, resultToFile, getResultsFromFile
 import itertools
 
 
-def mergeResultFiles(resultFiles, faultRange, saveDir):
+def saveMergeResult(mergeResult: list, resultFiles: list, faultRange: list, saveDir: str):
     """
-    合并结果文件
+    保存合并的结果
+    :param mergeResult:
     :param resultFiles:
     :param faultRange:
     :param saveDir:
     :return:
     """
-    combinationCount = {}
-    fileCnt = len(resultFiles)  # 基础结果文件个数
-    # 读取结果文件内容
-    for idx, filePath in enumerate(resultFiles):
-        for combination in getResultsFromFile(filePath):
-            combinationCount[combination] = combinationCount.get(combination, 0) + 1
-    # 合并的结果
-    mergeResult = []
-    faultLeft, faultRight = faultRange
-    for key, value in combinationCount.items():
-        if faultLeft <= fileCnt - value <= faultRight:
-            mergeResult.append(key)
-    mergeResult.sort()  # 结果排序
-    # 保存结果
-    filePath = '+'.join([os.path.splitext(os.path.basename(file))[0] for file in resultFiles]) \
-               + f'（{faultLeft}-{faultRight}）结果={len(mergeResult)}.txt'
-    resultToFile(mergeResult, os.path.join(saveDir, filePath))
+    # 文件名
+    filename = '+'.join([os.path.splitext(os.path.basename(file))[0] for file in resultFiles]) +\
+               f'（{faultRange[0]}-{faultRange[1]}）结果={len(mergeResult)}.txt'
+    resultToFile(mergeResult, os.path.join(saveDir, filename))
+
+
+def mergeBasicOther(basicFile: str, otherResultFiles: list, faultRange: list, saveDir: str):
+    """
+    合并基础结果和其他结果
+    :param basicFile:
+    :param otherResultFiles:
+    :param faultRange:
+    :param saveDir:
+    :return:
+    """
+    basicResult = getResultsFromFile(basicFile)
+    otherMergeResult = mergeResultFiles(otherResultFiles, faultRange)
+    mergeResult = list(set(basicResult) & set(otherMergeResult))
+    saveMergeResult(mergeResult, [basicFile] + otherResultFiles, faultRange, saveDir)
 
 
 def allMergeService(basicFile, otherGroups, faultRange, saveDir):
@@ -51,8 +53,8 @@ def allMergeService(basicFile, otherGroups, faultRange, saveDir):
     :param saveDir:
     :return:
     """
-    for idx, group in enumerate(otherGroups):
-        mergeResultFiles([basicFile] + list(group), faultRange, saveDir)
+    for group in otherGroups:
+        mergeBasicOther(basicFile, list(group), faultRange, saveDir)
 
 
 def randomMergeService(basicFile, otherResultFiles, otherCnt, batchSize, faultRange, saveDir):
@@ -67,8 +69,8 @@ def randomMergeService(basicFile, otherResultFiles, otherCnt, batchSize, faultRa
     :return:
     """
     for i in range(batchSize):
-        resultFiles = [basicFile] + random.sample(otherResultFiles, otherCnt)
-        mergeResultFiles(resultFiles, faultRange, saveDir)
+        randomResultFiles = random.sample(otherResultFiles, otherCnt)
+        mergeBasicOther(basicFile, randomResultFiles, faultRange, saveDir)
 
 
 class MergeThread(QThread):
@@ -101,7 +103,9 @@ class MergeThread(QThread):
         基础合并
         :return:
         """
-        mergeResultFiles(self.basicResultFiles, self.faultRange, self.saveDir)
+        self.progress.emit(1)
+        mergeResult = mergeResultFiles(self.basicResultFiles, self.faultRange)
+        saveMergeResult(mergeResult, self.basicResultFiles, self.faultRange, self.saveDir)
         self.finishedCnt.emit(len(self.basicResultFiles))
         self.progress.emit(100)
 
@@ -115,14 +119,15 @@ class MergeThread(QThread):
         # 其他文件穷举组合个数
         otherGroupCnt = len(otherGroups)
         for fileIndex, basicFile in enumerate(self.basicResultFiles):
+            self.progress.emit(1)
             # 如果条件数小于进程数
             if otherGroupCnt < self.processCnt:
                 self.processCnt = otherGroupCnt  # 进程数等于条件数
             # 每个进程计算的条件个数
             batchSize = math.ceil(otherGroupCnt / self.processCnt)
-            # 如果只有一个条件不启用多进程
+            # 如果只合并一次
             if otherGroupCnt == 1:
-                self.mergeResultFiles([basicFile] + self.otherResultFiles)
+                mergeBasicOther(basicFile, self.otherResultFiles, self.faultRange, self.saveDir)
             else:
                 self.pool = Pool(otherGroupCnt // batchSize)  # 进程池
                 # 添加进程，每个进程运行batchSize个条件
@@ -133,7 +138,7 @@ class MergeThread(QThread):
                 self.pool.close()
                 # 主进程运行，主要是为了监控进度
                 for idx, group in enumerate(otherGroups[0: batchSize]):
-                    mergeResultFiles([basicFile] + list(group), self.faultRange, self.saveDir)
+                    mergeBasicOther(basicFile, list(group), self.faultRange, self.saveDir)
                     self.progress.emit(int((idx + 1) / batchSize * 100) - 1)
                 # 主线程等待进程池所有进程退出
                 self.pool.join()
@@ -150,6 +155,7 @@ class MergeThread(QThread):
         :return:
         """
         for fileIndex, basicFile in enumerate(self.basicResultFiles):
+            self.progress.emit(1)
             # 如果条件数小于进程数
             if self.randomCnt < self.processCnt:
                 self.processCnt = self.randomCnt  # 进程数等于随机组合次数
@@ -157,7 +163,8 @@ class MergeThread(QThread):
             batchSize = math.ceil(self.randomCnt / self.processCnt)
             # 如果只有一个条件不启用多进程
             if self.randomCnt == 1:
-                self.mergeResultFiles([basicFile] + random.sample(self.otherResultFiles, self.otherCnt))
+                mergeBasicOther(basicFile, random.sample(self.otherResultFiles, self.otherCnt),
+                                self.faultRange, self.saveDir)
             else:
                 self.pool = Pool(self.randomCnt // batchSize)  # 进程池
                 # 添加进程，每个进程运行batchSize个条件
@@ -170,8 +177,8 @@ class MergeThread(QThread):
                 self.pool.close()
                 # 主进程运行，主要是为了监控进度
                 for idx in range(batchSize):
-                    resultFiles = [basicFile] + random.sample(self.otherResultFiles, self.otherCnt)
-                    mergeResultFiles(resultFiles, self.faultRange, self.saveDir)
+                    mergeBasicOther(basicFile, random.sample(self.otherResultFiles, self.otherCnt),
+                                    self.faultRange, self.saveDir)
                     self.progress.emit(int((idx + 1) / batchSize * 100) - 1)
                 # 主线程等待进程池所有进程退出
                 self.pool.join()

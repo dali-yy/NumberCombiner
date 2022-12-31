@@ -101,6 +101,7 @@ class CalThread(QThread):
                 continue
             # 每个进程计算的条件个数
             batchSize = math.ceil(condCnt / self.processCnt)
+            self.progress.emit(1)
             # 如果只有一个条件不启用多进程
             if condCnt == 1:
                 combinationCnt = {}
@@ -183,6 +184,7 @@ class CalThread(QThread):
             calCnt = condCnt - self.lineCnt + 1
             # 每个进程计算的次数
             batchSize = math.ceil(calCnt / self.processCnt)
+            self.progress.emit(1)
             # 如果只计算一次不启用多进程
             if calCnt == 1:
                 genRangeLine(conditions, 0, len(conditions), faultRange, condFile['filename'], self.resultDir)
@@ -240,6 +242,7 @@ class CalThread(QThread):
                 self.processCnt = self.randomCnt  # 进程数等于随机次数
             # 每个进程计算的次数
             batchSize = math.ceil(self.randomCnt / self.processCnt)
+            self.progress.emit(1)
             # 如果只计算一次不启用多进程
             if self.randomCnt == 1:
                 genRandomLine(conditions, self.lineCnt, faultRange, condFile['filename'], self.resultDir)
