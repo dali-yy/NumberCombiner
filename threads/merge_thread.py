@@ -41,6 +41,7 @@ def mergeBasicOther(basicFile: str, otherResultFiles: list, faultRange: list, sa
     basicResult = getResultsFromFile(basicFile)
     otherMergeResult = mergeResultFiles(otherResultFiles, faultRange)
     mergeResult = list(set(basicResult) & set(otherMergeResult))
+    mergeResult.sort()
     saveMergeResult(mergeResult, [basicFile] + otherResultFiles, faultRange, saveDir)
 
 
